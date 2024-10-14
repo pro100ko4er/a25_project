@@ -4,14 +4,33 @@ $dbh = new sdbh();
 ?>
 <html>
 <head>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
-          crossorigin="anonymous">
-    <link href="assets/css/style.css" rel="stylesheet"/>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
-            crossorigin="anonymous"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+  <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
 <div class="container">
+
+<div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5" id="exampleModalLabel">Оставить заявку</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+      <div class="mb-3">
+  <label for="exampleFormControlInput1" class="form-label">Номер телефона</label>
+  <input type="text" class="form-control" id="form-phone-number" placeholder="+ (7) (000) 000-00-00">
+</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary btn-send-request" data-bs-dismiss="modal">Оставить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
     <div class="row row-header">
         <div class="col-12" id="count">
             <img src="assets/img/logo.png" alt="logo" style="max-height:50px"/>
@@ -37,9 +56,11 @@ $dbh = new sdbh();
                     </select>
                 <?php } ?>
 
-                <label for="customRange1" class="form-label" id="count">Количество дней:</label>
-                <input type="number" name="days" class="form-control" id="customRange1" min="1" max="30">
-
+                <label for="customRange1" class="form-label" id="count">Начало аренды:</label>
+                <input type="date" name="days-start-rent" class="form-control form-days-start-rent" id="customRange1">
+                <label for="customRange2" class="form-label" id="count">Конец аренды:</label>
+                <input type="date" name="days-end-rent" class="form-control form-days-end-rent" id="customRange2">
+                
                 <?php $services = unserialize($dbh->mselect_rows('a25_settings', ['set_key' => 'services'], 0, 1, 'id')[0]['set_value']);
                 if (is_array($services)) {
                     ?>
@@ -49,7 +70,7 @@ $dbh = new sdbh();
                     foreach ($services as $k => $s) {
                         ?>
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="services[]" value="<?= $s; ?>" id="flexCheck<?= $index; ?>">
+                            <input class="form-check-input" type="checkbox" name="services[]" data-name-service="<?= $k ?>" value="<?= $s; ?>" id="flexCheck<?= $index; ?>">
                             <label class="form-check-label" for="flexCheck<?= $index; ?>">
                                 <?= $k ?>: <?= $s ?>
                             </label>
@@ -61,24 +82,84 @@ $dbh = new sdbh();
             </form>
 
             <h5>Итоговая стоимость: <span id="total-price"></span></h5>
+            <button type="button" class="btn btn-success btn-leave-request hidden" data-bs-toggle="modal" data-bs-target="#exampleModal">
+  Оставить заявку
+</button>
+<div class="result"></div>
+<div class="lds-ring hidden"><div></div><div></div><div></div><div></div></div>
         </div>
     </div>
 </div>
 
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.mask/1.14.16/jquery.mask.min.js" integrity="sha512-pHVGpX7F/27yZ0ISY+VVjyULApbDlD0/X0rgGbTqCE7WFW5MezNTWG/dnhtbBuICzsd0WQPgpE4REBLv+UqChw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="assets/js/utils.js"></script>
 <script>
+    const leaveRequest = $('.btn-leave-request')
     $(document).ready(function() {
+    const phone_number = $('#form-phone-number')
+    phone_number.mask('+ (7) (000) 000-00-00')
+    const product_id = $('.form-select')
+    const start_rent = $('.form-days-start-rent')
+    const end_rent = $('.form-days-end-rent')
+    const services = $('.form-check-input')
+    const price = $('#total-price')
+    const selected_services = []
+
+        $('.btn-send-request').click(e => {
+        showBlock('.lds-ring')
+        for(let i = 0; i < services.length; i++) {
+        const service = $(services[i])
+        console.log(service.prop('checked'))
+        if(service.prop('checked')) {
+            console.log(service)
+            selected_services.push({name: service.attr('data-name-service'), price: service.val()})
+        }
+    }
+            const data = {
+                phone_number: phone_number.val(),
+                product_id: product_id.val(),
+                start_rent: start_rent.val(),
+                end_rent: end_rent.val(),
+                price: price.text(),
+                selected_services
+            }
+            $.ajax({
+                url: 'App/Api/SendMail.php',
+                type: 'POST',
+                headers: {
+                    "Content-Type": 'application-json'
+                },
+                data: JSON.stringify(data),
+                success: (data, textStatus, jqXHR) => {
+          if(textStatus === 'success') {
+            showResult("Заявка успешно отправлена! Ожидайте обратной связи", '.result')
+          }
+          else {
+            showError("Ошибка отправик заявки! Попробуйте позже...", '.result')
+          }
+          hiddenBlock('.lds-ring')
+        },
+        error: (error, textStatus, errorThrown) => {
+          hiddenBlock('.lds-ring')
+          showError("Ошибка отправки! Попробуйте позже...", '.result')
+        }
+            })
+        })
+
         $("#form").submit(function(event) {
             event.preventDefault();
-
+            
             $.ajax({
                 url: 'App/calculate.php',
                 type: 'POST',
                 data: $(this).serialize(),
                 success: function(response) {
                     $("#total-price").text(response);
+                    leaveRequest.removeClass('hidden')
                 },
                 error: function() {
+                    leaveRequest.addClass('hidden')
                     $("#total-price").text('Ошибка при расчете');
                 }
             });
